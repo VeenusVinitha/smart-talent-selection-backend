@@ -13,7 +13,7 @@ A full-stack AI-driven ranking dashboard. It utilizes a **70/30 weighted algorit
 ### Tech Stack
 * **Frontend:** React.js, TypeScript, Tailwind CSS, Axios, Lucide React.
 * **Backend:** Python, FastAPI, SQLAlchemy (ORM), PostgreSQL.
-* **AI Engine:** stepfun/step-3.5-flash:free and GPT-4o-mini via OpenRouter API  
+* **AI Engine:**  GPT-4o-mini via OpenRouter API  
 * **Libraries:** PyMuPDF, pypdf, python-docx, python-dotenv.
 
 ---
