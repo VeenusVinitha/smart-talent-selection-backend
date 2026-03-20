@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.core.database import get_db, engine, Base
@@ -10,8 +10,6 @@ from app.services.processor import get_structured_profile, extract_text_from_fil
 import os
 from typing import List
 import uuid
-
-
 
 app = FastAPI()
 
@@ -29,52 +27,42 @@ class JDRequest(BaseModel):
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-@app.post("/upload")
-async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    # Parse the file and extract text
-    file.file.seek(0)
-    text = extract_text(file.file)
-    
-    new_candidate = models.Candidate(
-        filename=file.filename,
-        full_text=text
-    )
-    db.add(new_candidate)
-    db.commit()
-    db.refresh(new_candidate)
-
-    return {"id": new_candidate.id, "status": "Saved to Database"}
-
-
-
-
 from typing import List
 
 @app.post("/parse-resume")
 async def parse_resume(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
     results = []
+    errors = []
+    # Define supported formats
+    supported_extensions = [".pdf", ".docx", ".jpg", ".jpeg", ".png"]
     
     for file in files:
-        # Generate a unique temp filename to avoid collisions during concurrent uploads
         unique_id = uuid.uuid4().hex
         extension = os.path.splitext(file.filename)[1].lower()
+        
+        # --- NEW VALIDATION BLOCK ---
+        if extension not in supported_extensions:
+            errors.append({
+                "filename": file.filename, 
+                "error": f"Unsupported file type: {extension}. Supported types: {', '.join(supported_extensions)}"
+            })
+            continue 
+        # ----------------------------
+
         temp_path = f"temp_{unique_id}_{file.filename}"
         
         try:
-            # Save file locally
             with open(temp_path, "wb") as buffer:
                 buffer.write(await file.read())
 
-            # Process the file
             resume_text = extract_text_from_file(temp_path, extension)
+            
             if not resume_text:
+                errors.append({"filename": file.filename, "error": "Could not extract text from file."})
                 continue 
 
             profile = get_structured_profile(resume_text)
             
-            # Add to database
             new_candidate = models.Candidate(
                 filename=file.filename,
                 resume_text=resume_text,
@@ -85,17 +73,21 @@ async def parse_resume(files: List[UploadFile] = File(...), db: Session = Depend
             
         except Exception as e:
             print(f"Error processing {file.filename}: {e}")
-            # Continue to next file even if one fails
+            errors.append({"filename": file.filename, "error": str(e)})
             continue
             
         finally:
-            # Clean up temp file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
     
     db.commit()
-    return {"status": "Success", "processed_count": len(results), "profiles": results}
-
+    return {
+        "status": "Completed", 
+        "processed_count": len(results), 
+        "failed_count": len(errors),
+        "profiles": results,
+        "errors": errors  # Returns a list of files that failed and why
+    }
 # Upload Job Description
 @app.post("/upload-job")
 async def upload_job(request: JDRequest, db: Session = Depends(get_db)):
