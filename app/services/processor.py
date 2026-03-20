@@ -4,8 +4,20 @@ from openai import OpenAI
 import json
 import os
 from dotenv import load_dotenv
+import pytesseract
+from PIL import Image
+
+import pytesseract
+
+# This tells Python where the actual engine is installed
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+
+#C:\Users\User\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
 
 load_dotenv()
+
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")
 
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
@@ -13,16 +25,27 @@ client = OpenAI(
 
 )
 
+
 def extract_text_from_file(file_path: str, extension: str):
     text = ""
+    extension = extension.lower() # Ensure case-insensitivity
+
     if extension == ".pdf":
         doc = fitz.open(file_path)
         for page in doc:
             text += page.get_text()
+            
     elif extension == ".docx":
         doc = Document(file_path)
         for para in doc.paragraphs:
             text += para.text + "\n"
+            
+    elif extension in [".jpg", ".jpeg", ".png"]:
+        # Open the image using PIL
+        img = Image.open(file_path)
+        # Use pytesseract to extract text
+        text = pytesseract.image_to_string(img)
+        
     return text
 
 def get_structured_profile(resume_text: str):
